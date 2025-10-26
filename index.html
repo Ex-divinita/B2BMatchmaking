@@ -1,0 +1,981 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>B2B Matchmaking Event</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load Inter font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* Use Inter as the default font */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* Custom scrollbar for the exhibitor list (for a cleaner look) */
+        #exhibitor-list::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        #exhibitor-list::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+
+        #exhibitor-list::-webkit-scrollbar-thumb {
+            background: #c5c5c5;
+            border-radius: 10px;
+        }
+
+        #exhibitor-list::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+
+        /* This is the class that will be toggled for selection */
+        /* We use !important to ensure it overrides Tailwind's base classes */
+        .card-selected {
+            background-color: #fff1f2 !important;
+            /* red-50 */
+            border-color: #f43f5e !important;
+            /* red-500 */
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+
+        /* Simple modal fade-in transition */
+        #edit-modal,
+        #add-modal,
+        #confirm-modal {
+            transition: opacity 0.3s ease-in-out;
+        }
+
+        /* Added for confirmation screen */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: scale(0.95);
+            }
+
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        #confirmation-message {
+            animation: fadeIn 0.5s ease-out;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-700">
+
+    <!-- Main Container: Constrains the app width for a "mobile-app" feel, even on desktop -->
+    <div id="main-app-container" class="max-w-3xl mx-auto h-screen flex flex-col bg-white shadow-2xl overflow-hidden">
+
+        <!-- I. Upper Block: The Exhibitor Directory & Selection Tool -->
+        <div id="upper-block" class="h-[60vh] flex-shrink-0 flex flex-col border-b-4 border-gray-200">
+
+            <!-- Filter & Search Controls -->
+            <div class="p-4 bg-gray-50 border-b space-y-3">
+                <input type="text" id="search-bar" placeholder="Search by Exhibitor's Name..."
+                    class="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <select id="sector-filter"
+                        class="w-full p-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="all">All Sectors</option>
+                        <!-- Options will be populated by JS -->
+                    </select>
+                    <select id="country-filter"
+                        class="w-full p-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="all">All Countries</option>
+                        <!-- Options will be populated by JS -->
+                    </select>
+                    <select id="sort-filter"
+                        class="w-full p-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="az">Sort A to Z</option>
+                        <option value="za">Sort Z to A</option>
+                    </select>
+                </div>
+
+                <!-- Add/Delete/Save/Upload Controls -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t mt-3">
+                    <button id="add-exhibitor-btn"
+                        class="w-full p-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors">
+                        + Add Exhibitor
+                    </button>
+                    <button id="save-json-btn"
+                        class="w-full p-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors">
+                        Save as JSON
+                    </button>
+                    <!-- File input styled as a button -->
+                    <label
+                        class="w-full p-2 bg-gray-600 text-white rounded-lg font-medium hover:bg-gray-700 text-center cursor-pointer transition-colors">
+                        Upload JSON
+                        <input type="file" id="upload-json-input" class="hidden" accept="application/json">
+                    </label>
+                </div>
+            </div>
+
+            <!-- Exhibitor List: This is the internally scrolling container -->
+            <div id="exhibitor-list" class="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-100">
+                <!-- Exhibitor cards will be dynamically injected here by JavaScript -->
+                <!-- Loading Skeleton -->
+                <div class="p-3 border rounded-lg flex items-center space-x-3 bg-white animate-pulse">
+                    <div class="w-12 h-12 bg-gray-200 rounded-full flex-shrink-0"></div>
+                    <div class="flex-1 min-w-0 space-y-2">
+                        <div class="h-4 bg-gray-200 rounded w-3/4"></div>
+                        <div class="h-3 bg-gray-200 rounded w-1/2"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- II. Down Block: Selection Summary & Contact Form -->
+        <div id="down-block" class="flex-1 h-[40vh] flex flex-col overflow-y-auto p-5 bg-white">
+
+            <!-- Selection Summary -->
+            <div id="selection-summary-container" class="mb-4">
+                <h2 id="selection-summary" class="text-xl font-bold text-gray-800">0 Companies Selected</h2>
+                <p class="text-sm text-gray-500">Your selections will appear here. Fill out the form below to submit
+                    your request.</p>
+            </div>
+
+            <!-- Contact Form -->
+            <form id="contact-form" class="space-y-3 flex-1 flex flex-col">
+                <div class="flex-1 space-y-3 overflow-y-auto pr-2">
+                    <!-- Form Message Area -->
+                    <div id="form-message" class="hidden p-3 rounded-lg text-sm"></div>
+
+                    <!-- Form Fields -->
+                    <div>
+                        <label for="full-name" class="block text-sm font-medium text-gray-700 mb-1">Full Name (MUST FILL
+                            IN)</label>
+                        <input type="text" id="full-name" name="full-name" required
+                            class="w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div>
+                        <label for="email" class="block text-sm font-medium text-gray-700 mb-1">Email (MUST FILL
+                            IN)</label>
+                        <input type="email" id="email" name="email" required
+                            class="w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div>
+                        <label for="phone" class="block text-sm font-medium text-gray-700 mb-1">Phone (MUST FILL
+                            IN)</label>
+                        <input type="tel" id="phone" name="phone" required
+                            class="w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div>
+                        <label for="position" class="block text-sm font-medium text-gray-700 mb-1">Position (MUST FILL
+                            IN)</label>
+                        <input type="text" id="position" name="position" required
+                            class="w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div>
+                        <label for="company" class="block text-sm font-medium text-gray-700 mb-1">Company (MUST FILL
+                            IN)</label>
+                        <input type="text" id="company" name="company" required
+                            class="w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                </div>
+
+                <!-- Call to Action -->
+                <div class="pt-3 border-t">
+                    <button type="submit" id="submit-button"
+                        class="w-full bg-blue-600 text-white p-3 rounded-lg font-bold text-lg hover:bg-blue-700 transition-colors duration-200 disabled:bg-gray-400 disabled:cursor-not-allowed">
+                        Submit Matchmaking Request
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- III. Modal for "Edit Exhibitor" (was "More Info") -->
+    <div id="edit-modal"
+        class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 opacity-0">
+        <form id="edit-form" class="bg-white p-6 rounded-2xl shadow-xl max-w-lg w-full max-h-[80vh] flex flex-col">
+            <!-- Modal Header -->
+            <div class="flex justify-between items-center pb-3 border-b">
+                <h3 id="edit-modal-title" class="text-2xl font-bold">Edit Exhibitor</h3>
+                <button type="button" id="close-edit-modal-btn"
+                    class="text-gray-400 hover:text-gray-700 text-3xl">&times;</button>
+            </div>
+            <!-- Modal Content (Form Fields) -->
+            <div class="py-4 space-y-4 overflow-y-auto">
+                <input type="hidden" id="edit-id">
+                <div>
+                    <label for="edit-name" class="block text-sm font-medium text-gray-700 mb-1">Exhibitor Name</label>
+                    <input type="text" id="edit-name" required
+                        class="w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                    <label for="edit-sector" class="block text-sm font-medium text-gray-700 mb-1">Sector</label>
+                    <select id="edit-sector" required
+                        class="w-full p-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <!-- Options populated by JS -->
+                    </select>
+                </div>
+                <div>
+                    <label for="edit-country" class="block text-sm font-medium text-gray-700 mb-1">Country</label>
+                    <select id="edit-country" required
+                        class="w-full p-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <!-- Options populated by JS -->
+                    </select>
+                </div>
+                <div>
+                    <label for="edit-logo-url" class="block text-sm font-medium text-gray-700 mb-1">Logo URL</label>
+                    <input type="url" id="edit-logo-url" placeholder="https://example.com/logo.png"
+                        class="w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                    <label for="edit-description"
+                        class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                    <textarea id="edit-description" rows="4"
+                        class="w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+                </div>
+                <div id="edit-form-message" class="hidden p-3 rounded-lg text-sm bg-red-100 text-red-700"></div>
+            </div>
+            <!-- Modal Footer -->
+            <div class="pt-3 border-t flex justify-between items-center">
+                <button type="button" id="edit-delete-btn"
+                    class="bg-red-600 text-white px-5 py-2 rounded-lg font-medium hover:bg-red-700">Delete
+                    Exhibitor</button>
+                <div class="space-x-2">
+                    <button type="button" id="close-edit-modal-btn-footer"
+                        class="bg-gray-200 text-gray-800 px-5 py-2 rounded-lg font-medium hover:bg-gray-300">Cancel</button>
+                    <button type="submit" id="save-changes-btn"
+                        class="bg-green-600 text-white px-5 py-2 rounded-lg font-medium hover:bg-green-700">Save
+                        Changes</button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- IV. Modal for "Add Exhibitor" -->
+    <div id="add-modal"
+        class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 opacity-0">
+        <form id="add-form" class="bg-white p-6 rounded-2xl shadow-xl max-w-lg w-full max-h-[80vh] flex flex-col">
+            <!-- Modal Header -->
+            <div class="flex justify-between items-center pb-3 border-b">
+                <h3 id="add-modal-title" class="text-2xl font-bold">Add New Exhibitor</h3>
+                <button type="button" id="close-add-modal-btn"
+                    class="text-gray-400 hover:text-gray-700 text-3xl">&times;</button>
+            </div>
+            <!-- Modal Content (Form Fields) -->
+            <div class="py-4 space-y-4 overflow-y-auto">
+                <div>
+                    <label for="add-name" class="block text-sm font-medium text-gray-700 mb-1">Exhibitor Name</label>
+                    <input type="text" id="add-name" required
+                        class="w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                    <label for="add-sector" class="block text-sm font-medium text-gray-700 mb-1">Sector</label>
+                    <select id="add-sector" required
+                        class="w-full p-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <!-- Options populated by JS -->
+                    </select>
+                </div>
+                <div>
+                    <label for="add-country" class="block text-sm font-medium text-gray-700 mb-1">Country</label>
+                    <select id="add-country" required
+                        class="w-full p-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <!-- Options populated by JS -->
+                    </select>
+                </div>
+                <div>
+                    <label for="add-logo-url" class="block text-sm font-medium text-gray-700 mb-1">Logo URL</label>
+                    <input type="url" id="add-logo-url" placeholder="https://example.com/logo.png"
+                        class="w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                    <label for="add-description"
+                        class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                    <textarea id="add-description" rows="4"
+                        class="w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+                </div>
+                <div id="add-form-message" class="hidden p-3 rounded-lg text-sm bg-red-100 text-red-700"></div>
+            </div>
+            <!-- Modal Footer -->
+            <div class="pt-3 border-t text-right space-x-2">
+                <button type="button" id="close-add-modal-btn-footer"
+                    class="bg-gray-200 text-gray-800 px-5 py-2 rounded-lg font-medium hover:bg-gray-300">Cancel</button>
+                <button type="submit" id="save-exhibitor-btn"
+                    class="bg-green-600 text-white px-5 py-2 rounded-lg font-medium hover:bg-green-700">Save
+                    Exhibitor</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- V. Modal for "Confirm Delete" -->
+    <div id="confirm-modal"
+        class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 opacity-0">
+        <div id="confirm-modal-box" class="bg-white p-6 rounded-2xl shadow-xl max-w-sm w-full flex flex-col">
+            <!-- Modal Header -->
+            <div class="flex justify-between items-center pb-3">
+                <h3 id="confirm-title" class="text-2xl font-bold text-red-600">Confirm Deletion</h3>
+            </div>
+            <!-- Modal Content -->
+            <div id="confirm-content" class="py-4 space-y-4">
+                <p id="confirm-text">Are you sure you want to delete this exhibitor? This action cannot be undone.</p>
+            </div>
+            <!-- Modal Footer -->
+            <div class="pt-3 text-right space-x-2">
+                <button id="cancel-delete-btn"
+                    class="bg-gray-200 text-gray-800 px-5 py-2 rounded-lg font-medium hover:bg-gray-300">Cancel</button>
+                <button id="confirm-delete-btn"
+                    class="bg-red-600 text-white px-5 py-2 rounded-lg font-medium hover:bg-red-700">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- VI. Confirmation Screen -->
+    <div id="confirmation-screen" class="hidden fixed inset-0 bg-gray-700 flex items-center justify-center p-4">
+        <div id="confirmation-message" class="bg-white rounded-xl shadow-2xl p-8 sm:p-12 text-center max-w-lg w-full">
+            <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-green-100 mb-6">
+                <svg class="h-10 w-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                    xmlns="http://www.w3.org/2000/svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                </svg>
+            </div>
+            <h2 class="text-3xl font-bold text-gray-800">Registration Confirmed!</h2>
+            <p id="response-text" class="mt-3 text-lg text-gray-600">Your registration has been received. You have
+                requested meetings with the following companies:</p>
+            <div id="session-list" class="mt-6 text-left max-w-md mx-auto space-y-2">
+                <!-- Selected companies will be listed here by JS -->
+            </div>
+        </div>
+    </div>
+
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        // --- MOCK DATA (Constants for dropdowns) ---
+        const MOCK_SECTORS = ['Energy & Infrastructure', 'Food & Agriculture', 'Tourism & Culture', 'Services', 'Education & Innovation'];
+        const MOCK_COUNTRIES = ['Albania', 'Austria', 'Italy', 'Serbia', 'Turkey', 'North Macedonia', 'United Kingdom', 'USA', 'Montenegro', 'Sweden', 'Slovenia', 'Greece', 'Bulgaria', 'Croatia', 'Czechia', 'Switherland'];
+
+        // --- APPLICATION STATE (Now dynamic) ---
+        let exhibitorsData = []; // This is now the source of truth
+        const selectedExhibitors = new Set();
+        let currentFilters = {
+            searchTerm: '',
+            sector: 'all',
+            country: 'all',
+            sort: 'az'
+        };
+        let exhibitorToDelete = null; // Stores the ID of the exhibitor pending deletion
+
+        // Function to generate a small list of mock exhibitors for startup
+        function generateMockData(count) {
+            let data = [];
+            for (let i = 1; i <= count; i++) {
+                const sector = MOCK_SECTORS[i % MOCK_SECTORS.length];
+                const country = MOCK_COUNTRIES[i % MOCK_COUNTRIES.length];
+                const name = `Exhibitor ${i} ${sector.substring(0, 3)}`;
+
+                data.push({
+                    id: `ex_${i}`,
+                    name: name,
+                    logoUrl: `https://placehold.co/100x100/E2E8F0/4A5568?text=${name.substring(0, 3)}${i}`,
+                    sector: sector,
+                    country: country,
+                    description: `This is a detailed description for ${name}, a leading company in the ${sector} industry from ${country}. They specialize in innovative solutions and are looking to connect with partners in B2B matchmaking. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.`
+                });
+            }
+            return data;
+        }
+
+        // --- DOM REFERENCES (DECLARED) ---
+        // These will be assigned inside DOMContentLoaded
+        let exhibitorList, selectionSummary, submitButton, searchBar, sectorFilter, countryFilter, sortFilter, contactForm, formMessage, requiredFields;
+        let mainAppContainer, confirmationScreen, sessionList; // Added for confirmation screen
+
+        // Edit Modal
+        let editModal, editForm, editModalTitle, closeEditModalBtn, closeEditModalBtnFooter, saveChangesBtn, editDeleteBtn;
+        let editId, editName, editSector, editCountry, editDescription, editFormMessage, editLogoUrl;
+
+        // Add Modal
+        let addModal, addForm, addFormMessage, addModalTitle, closeAddModalBtn, closeAddModalBtnFooter, saveExhibitorBtn, addSectorSelect, addCountrySelect, addLogoUrl;
+
+        // Confirm Modal
+        let confirmModal, confirmText, cancelDeleteBtn, confirmDeleteBtn;
+
+        // Admin Buttons
+        let addExhibitorBtn, saveJsonBtn, uploadJsonInput;
+
+
+        // --- CORE FUNCTIONS ---
+
+        /**
+         * Populates all dropdowns (filters, add modal, edit modal)
+         */
+        function populateFilters() {
+            // Use Sets to avoid duplicates
+            const allSectors = new Set([...MOCK_SECTORS, ...exhibitorsData.map(ex => ex.sector)]);
+            const allCountries = new Set([...MOCK_COUNTRIES, ...exhibitorsData.map(ex => ex.country)]);
+
+            // Clear existing options
+            sectorFilter.innerHTML = '<option value="all">All Sectors</option>';
+            countryFilter.innerHTML = '<option value="all">All Countries</option>';
+            addSectorSelect.innerHTML = '';
+            addCountrySelect.innerHTML = '';
+            editSector.innerHTML = '';
+            editCountry.innerHTML = '';
+
+            allSectors.forEach(sector => {
+                sectorFilter.add(new Option(sector, sector));
+                addSectorSelect.add(new Option(sector, sector));
+                editSector.add(new Option(sector, sector));
+            });
+            allCountries.forEach(country => {
+                countryFilter.add(new Option(country, country));
+                addCountrySelect.add(new Option(country, country));
+                editCountry.add(new Option(country, country));
+            });
+        }
+
+        /**
+         * Renders the list of exhibitors based on current filters and selections
+         */
+        function renderExhibitors() {
+            // 1. Filter and Sort the data
+            let filteredData = [...exhibitorsData]
+                // Filter by Search Term
+                .filter(ex => ex.name.toLowerCase().includes(currentFilters.searchTerm.toLowerCase()))
+                // Filter by Sector
+                .filter(ex => currentFilters.sector === 'all' || ex.sector === currentFilters.sector)
+                // Filter by Country
+                .filter(ex => currentFilters.country === 'all' || ex.country === currentFilters.country);
+
+            // 2. Sort the data
+            filteredData.sort((a, b) => {
+                if (currentFilters.sort === 'az') {
+                    return a.name.localeCompare(b.name);
+                } else {
+                    return b.name.localeCompare(a.name);
+                }
+            });
+
+            // 3. Generate HTML
+            if (filteredData.length === 0) {
+                exhibitorList.innerHTML = `<div class="text-center text-gray-500 p-6">No exhibitors match your criteria.</div>`;
+                return;
+            }
+
+            exhibitorList.innerHTML = filteredData.map(ex => {
+                const isSelected = selectedExhibitors.has(ex.id);
+                return `
+                    <div class="exhibitor-card bg-white p-3 border rounded-lg flex items-center space-x-3 cursor-pointer transition-all duration-200 hover:shadow-md ${isSelected ? 'card-selected' : 'border-gray-200'}" data-id="${ex.id}">
+                        <img src="${ex.logoUrl}" alt="${ex.name} Logo" class="w-12 h-12 bg-gray-200 rounded-lg flex-shrink-0 object-cover" onerror="this.src='https://placehold.co/100x100/E2E8F0/4A5568?text=Logo';">
+                        
+                        <div class="flex-1 min-w-0">
+                            <p class="font-semibold text-gray-800 truncate">${ex.name}</p>
+                            <p class="text-sm text-gray-500">${ex.sector} | ${ex.country}</p>
+                        </div>
+                        
+                        <button class="info-button text-sm font-medium text-blue-600 hover:underline flex-shrink-0 px-2 py-1" data-id="${ex.id}">
+                            More Info
+                        </button>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        /**
+         * Updates the summary text and submit button state
+         */
+        function updateSelectionSummary() {
+            const count = selectedExhibitors.size;
+            if (count === 0) {
+                selectionSummary.textContent = '0 Companies Selected';
+            } else if (count === 1) {
+                selectionSummary.textContent = '1 Company Selected';
+            } else {
+                selectionSummary.textContent = `${count} Companies Selected`;
+            }
+            // Enable/disable submit button
+            submitButton.disabled = count === 0;
+        }
+
+        /**
+         * Shows the modal with details for a specific exhibitor
+         */
+        function showEditModal(exhibitorId) {
+            const exhibitor = exhibitorsData.find(ex => ex.id === exhibitorId);
+            if (!exhibitor) return;
+
+            // Pre-fill the form
+            editForm.reset();
+            editFormMessage.classList.add('hidden');
+            editId.value = exhibitor.id;
+            editName.value = exhibitor.name;
+            editSector.value = exhibitor.sector;
+            editCountry.value = exhibitor.country;
+            editDescription.value = exhibitor.description;
+            editLogoUrl.value = exhibitor.logoUrl; // Pre-fill the logo URL
+            editModalTitle.textContent = `Edit: ${exhibitor.name}`;
+
+            editModal.classList.remove('hidden');
+            setTimeout(() => editModal.classList.remove('opacity-0'), 10); // Start fade-in
+        }
+
+        /**
+         * Hides the edit modal
+         */
+        function closeEditModal() {
+            editModal.classList.add('opacity-0');
+            setTimeout(() => editModal.classList.add('hidden'), 300); // Wait for fade-out
+        }
+
+        /**
+         * Shows the modal to add a new exhibitor
+         */
+        function showAddModal() {
+            addForm.reset();
+            addFormMessage.classList.add('hidden');
+            addModal.classList.remove('hidden');
+            setTimeout(() => addModal.classList.remove('opacity-0'), 10);
+        }
+
+        /**
+         * Hides the "Add Exhibitor" modal
+         */
+        function closeAddModal() {
+            addModal.classList.add('opacity-0');
+            setTimeout(() => addModal.classList.add('hidden'), 300);
+        }
+
+        /**
+         * Shows the confirmation modal for deletion
+         */
+        function showConfirmModal(id, name) {
+            exhibitorToDelete = id;
+            confirmText.textContent = `Are you sure you want to delete "${name}"? This action cannot be undone.`;
+            confirmModal.classList.remove('hidden');
+            setTimeout(() => confirmModal.classList.remove('opacity-0'), 10);
+        }
+
+        /**
+         * Hides the confirmation modal
+         */
+        function closeConfirmModal() {
+            exhibitorToDelete = null;
+            confirmModal.classList.add('opacity-0');
+            setTimeout(() => confirmModal.classList.add('hidden'), 300);
+        }
+
+        /**
+         * Deletes an exhibitor by ID
+         */
+        function deleteExhibitor(id) {
+            const index = exhibitorsData.findIndex(ex => ex.id === id);
+            if (index > -1) {
+                exhibitorsData.splice(index, 1);
+                selectedExhibitors.delete(id); // Remove from selection if it was selected
+                renderExhibitors();
+                updateSelectionSummary();
+                // We don't need to re-populate filters on delete, only on add/load
+            }
+        }
+
+
+        /**
+         * Shows a message (error or success) in the form
+         */
+        function showFormMessage(message, isError = true) {
+            formMessage.textContent = message;
+            formMessage.classList.remove('hidden');
+            if (isError) {
+                formMessage.classList.add('bg-red-100', 'text-red-700');
+                formMessage.classList.remove('bg-green-100', 'text-green-700');
+            } else {
+                formMessage.classList.remove('bg-red-100', 'text-red-700');
+                formMessage.classList.add('bg-green-100', 'text-green-700');
+            }
+        }
+
+
+        // --- EVENT HANDLERS ---
+
+        /**
+         * Handles clicks within the exhibitor list for selection or info
+         */
+        function handleListClick(event) {
+            const infoButton = event.target.closest('.info-button');
+            const card = event.target.closest('.exhibitor-card');
+
+            if (infoButton) {
+                // "More Info" button was clicked
+                showEditModal(infoButton.dataset.id);
+            } else if (card) {
+                // The card itself was clicked
+                const id = card.dataset.id;
+                if (selectedExhibitors.has(id)) {
+                    selectedExhibitors.delete(id);
+                    card.classList.remove('card-selected');
+                } else {
+                    selectedExhibitors.add(id);
+                    card.classList.add('card-selected');
+                }
+                updateSelectionSummary();
+            }
+        }
+
+        /**
+         * Handles changes in any filter input
+         */
+        function handleFilterChange() {
+            currentFilters.searchTerm = searchBar.value;
+            currentFilters.sector = sectorFilter.value;
+            currentFilters.country = countryFilter.value;
+            currentFilters.sort = sortFilter.value;
+            renderExhibitors();
+        }
+
+        /**
+         * Handles the contact form submission
+         */
+        function handleFormSubmit(event) {
+            event.preventDefault();
+            formMessage.classList.add('hidden'); // Hide old messages
+
+            // 1. Validate required fields
+            let allValid = true;
+            requiredFields.forEach(field => {
+                if (field.value.trim() === '') {
+                    allValid = false;
+                    field.classList.add('border-red-500', 'ring-red-500');
+                } else {
+                    field.classList.remove('border-red-500', 'ring-red-500');
+                }
+            });
+
+            if (!allValid) {
+                showFormMessage('Please fill in all the required fields marked with (MUST FILL IN).', true);
+                return;
+            }
+
+            // 2. Disable button and show loading state
+            submitButton.disabled = true;
+            submitButton.textContent = 'Submitting...';
+
+            // 3. Prepare data for submission (mock)
+            const formData = new FormData(contactForm);
+            const submissionData = {
+                contactInfo: Object.fromEntries(formData.entries()),
+                selectedCompanyIds: Array.from(selectedExhibitors)
+            };
+
+            // 4. Simulate API call
+            console.log("--- SUBMISSION DATA ---");
+            console.log(JSON.stringify(submissionData, null, 2));
+
+            setTimeout(() => {
+                // 5. Populate confirmation screen
+                sessionList.innerHTML = ''; // Clear previous
+                selectedExhibitors.forEach(id => {
+                    const exhibitor = exhibitorsData.find(ex => ex.id === id);
+                    if (exhibitor) {
+                        const li = document.createElement('li');
+                        li.className = 'p-2 bg-gray-50 rounded-lg text-gray-700 font-medium';
+                        li.textContent = exhibitor.name;
+                        sessionList.appendChild(li);
+                    }
+                });
+
+                // 6. Hide app, show confirmation
+                mainAppContainer.classList.add('hidden');
+                confirmationScreen.classList.remove('hidden');
+
+                // 7. Reset form and selections (for good measure, though they are hidden)
+                contactForm.reset();
+                selectedExhibitors.clear();
+                renderExhibitors(); // Re-render to remove 'selected' styles
+                updateSelectionSummary(); // Resets counter
+                submitButton.textContent = 'Submit Matchmaking Request';
+                submitButton.disabled = false; // Re-enable in case user navigates back
+
+            }, 1500);
+        }
+
+        /**
+         * Handles the "Add Exhibitor" form submission
+         */
+        function handleAddExhibitor(event) {
+            event.preventDefault();
+            const name = document.getElementById('add-name').value.trim();
+            const sector = document.getElementById('add-sector').value;
+            const country = document.getElementById('add-country').value;
+            const description = document.getElementById('add-description').value.trim();
+            const logoUrl = document.getElementById('add-logo-url').value.trim();
+
+            if (!name) {
+                addFormMessage.textContent = 'Exhibitor Name is required.';
+                addFormMessage.classList.remove('hidden');
+                return;
+            }
+
+            const newExhibitor = {
+                id: `ex_${new Date().getTime()}`, // Simple unique ID
+                name: name,
+                logoUrl: logoUrl || `https://placehold.co/100x100/E2E8F0/4A5568?text=${name.substring(0, 3)}`,
+                sector: sector,
+                country: country,
+                description: description || `Details for ${name}.`
+            };
+
+            exhibitorsData.push(newExhibitor);
+            populateFilters(); // Re-populate filters to include new sector/country if needed
+            renderExhibitors();
+            closeAddModal();
+        }
+
+        /**
+         * Handles the "Save Changes" form submission (from Edit Modal)
+         */
+        function handleSaveChanges(event) {
+            event.preventDefault();
+            const id = editId.value;
+            const name = editName.value.trim();
+            const sector = editSector.value;
+            const country = editCountry.value;
+            const description = editDescription.value.trim();
+            const logoUrl = editLogoUrl.value.trim();
+
+            if (!name) {
+                editFormMessage.textContent = 'Exhibitor Name is required.';
+                editFormMessage.classList.remove('hidden');
+                return;
+            }
+
+            const exhibitor = exhibitorsData.find(ex => ex.id === id);
+            if (exhibitor) {
+                exhibitor.name = name;
+                exhibitor.sector = sector;
+                exhibitor.country = country;
+                exhibitor.description = description;
+                // Update logo text if name changed or URL is provided/emptied
+                exhibitor.logoUrl = logoUrl || `https://placehold.co/100x100/E2E8F0/4A5568?text=${name.substring(0, 3)}`;
+            }
+
+            populateFilters(); // Re-populate in case of changes
+            renderExhibitors();
+            closeEditModal();
+        }
+
+        /**
+         * Handles the "Delete" button click *from within* the Edit Modal
+         */
+        function handleDeleteFromModal() {
+            const id = editId.value;
+            const name = editName.value;
+            showConfirmModal(id, name);
+        }
+
+        /**
+         * Handles the "Confirm Delete" button click
+         */
+        function handleConfirmDelete() {
+            if (exhibitorToDelete) {
+                deleteExhibitor(exhibitorToDelete);
+                closeEditModal(); // Also close the edit modal behind it
+            }
+            closeConfirmModal();
+        }
+
+        /**
+         * Handles saving the current exhibitor list to a JSON file
+         */
+        function handleSaveJSON() {
+            try {
+                const dataStr = JSON.stringify(exhibitorsData, null, 2);
+                const blob = new Blob([dataStr], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+
+                // Create a temporary link to trigger the download
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'exhibitors.json';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+
+                // Clean up the object URL
+                URL.revokeObjectURL(url);
+            } catch (error) {
+                console.error("Error saving JSON:", error);
+                // In a real app, you'd show this error to the user
+                showFormMessage("Error: Could not save data to JSON.", true);
+            }
+        }
+
+        /**
+         * Handles uploading a JSON file to replace the exhibitor list
+         */
+        function handleUploadJSON(event) {
+            const file = event.target.files[0];
+            if (!file) {
+                return; // No file selected
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if (Array.isArray(data)) {
+                        // Basic validation: check if items look like exhibitors
+                        if (data.length > 0 && typeof data[0] === 'object' && data[0].hasOwnProperty('id') && data[0].hasOwnProperty('name')) {
+                            exhibitorsData = data;
+                            selectedExhibitors.clear();
+                            populateFilters(); // Re-populate filters based on new data
+                            renderExhibitors();
+                            updateSelectionSummary();
+                            // Reset the file input so the same file can be loaded again
+                            event.target.value = null;
+                        } else if (data.length === 0) {
+                            // Handle empty array
+                            exhibitorsData = [];
+                            selectedExhibitors.clear();
+                            populateFilters();
+                            renderExhibitors();
+                            updateSelectionSummary();
+                            event.target.value = null;
+                        } else {
+                            throw new Error("Invalid file format. Expected an array of exhibitor objects.");
+                        }
+                    } else {
+                        throw new Error("Invalid file format. Expected a JSON array.");
+                    }
+                } catch (error) {
+                    console.error("Error uploading JSON:", error);
+                    showFormMessage(`Error: ${error.message}`, true);
+                    event.target.value = null; // Reset input on error
+                }
+            };
+            reader.onerror = () => {
+                console.error("File reading error");
+                showFormMessage("Error: Could not read the selected file.", true);
+                event.target.value = null; // Reset input on error
+            };
+            reader.readAsText(file);
+        }
+
+
+        // --- INITIALIZE APPLICATION ---
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- ASSIGN DOM REFERENCES ---
+            // Main UI
+            exhibitorList = document.getElementById('exhibitor-list');
+            selectionSummary = document.getElementById('selection-summary');
+            submitButton = document.getElementById('submit-button');
+            searchBar = document.getElementById('search-bar');
+            sectorFilter = document.getElementById('sector-filter');
+            countryFilter = document.getElementById('country-filter');
+            sortFilter = document.getElementById('sort-filter');
+            contactForm = document.getElementById('contact-form');
+            formMessage = document.getElementById('form-message');
+            requiredFields = contactForm.querySelectorAll('[required]');
+            mainAppContainer = document.getElementById('main-app-container');
+            confirmationScreen = document.getElementById('confirmation-screen');
+            sessionList = document.getElementById('session-list');
+
+            // Admin Buttons
+            addExhibitorBtn = document.getElementById('add-exhibitor-btn');
+            saveJsonBtn = document.getElementById('save-json-btn');
+            uploadJsonInput = document.getElementById('upload-json-input');
+
+            // "Edit Exhibitor" Modal
+            editModal = document.getElementById('edit-modal');
+            editForm = document.getElementById('edit-form');
+            editModalTitle = document.getElementById('edit-modal-title');
+            closeEditModalBtn = document.getElementById('close-edit-modal-btn');
+            closeEditModalBtnFooter = document.getElementById('close-edit-modal-btn-footer');
+            saveChangesBtn = document.getElementById('save-changes-btn');
+            editDeleteBtn = document.getElementById('edit-delete-btn');
+            editId = document.getElementById('edit-id');
+            editName = document.getElementById('edit-name');
+            editSector = document.getElementById('edit-sector');
+            editCountry = document.getElementById('edit-country');
+            editDescription = document.getElementById('edit-description');
+            editFormMessage = document.getElementById('edit-form-message');
+            editLogoUrl = document.getElementById('edit-logo-url');
+
+            // "Add Exhibitor" Modal
+            addModal = document.getElementById('add-modal');
+            addForm = document.getElementById('add-form');
+            addFormMessage = document.getElementById('add-form-message');
+            addModalTitle = document.getElementById('add-modal-title');
+            closeAddModalBtn = document.getElementById('close-add-modal-btn');
+            closeAddModalBtnFooter = document.getElementById('close-add-modal-btn-footer');
+            saveExhibitorBtn = document.getElementById('save-exhibitor-btn');
+            addSectorSelect = document.getElementById('add-sector');
+            addCountrySelect = document.getElementById('add-country');
+            addLogoUrl = document.getElementById('add-logo-url');
+
+            // "Confirm Delete" Modal
+            confirmModal = document.getElementById('confirm-modal');
+            confirmText = document.getElementById('confirm-text');
+            cancelDeleteBtn = document.getElementById('cancel-delete-btn');
+            confirmDeleteBtn = document.getElementById('confirm-delete-btn');
+
+
+            // 1. Generate data
+            exhibitorsData = generateMockData(5); // Start with a small sample
+
+            // 2. Set up filters
+            populateFilters();
+
+            // 3. Initial render
+            renderExhibitors();
+            updateSelectionSummary();
+
+            // 4. Attach event listeners
+            // Main List
+            exhibitorList.addEventListener('click', handleListClick);
+
+            // Filter listeners
+            searchBar.addEventListener('input', handleFilterChange);
+            sectorFilter.addEventListener('change', handleFilterChange);
+            countryFilter.addEventListener('change', handleFilterChange);
+            sortFilter.addEventListener('change', handleFilterChange);
+
+            // Contact Form
+            contactForm.addEventListener('submit', handleFormSubmit);
+
+            // "Edit" Modal listeners
+            closeEditModalBtn.addEventListener('click', closeEditModal);
+            closeEditModalBtnFooter.addEventListener('click', closeEditModal);
+            editForm.addEventListener('submit', handleSaveChanges);
+            editDeleteBtn.addEventListener('click', handleDeleteFromModal);
+            editModal.addEventListener('click', (e) => {
+                if (e.target === editModal) {
+                    closeEditModal();
+                }
+            });
+
+            // "Add" Modal Listeners
+            addExhibitorBtn.addEventListener('click', showAddModal);
+            closeAddModalBtn.addEventListener('click', closeAddModal);
+            closeAddModalBtnFooter.addEventListener('click', closeAddModal);
+            addForm.addEventListener('submit', handleAddExhibitor);
+
+            // "Confirm Delete" Modal Listeners
+            cancelDeleteBtn.addEventListener('click', closeConfirmModal);
+            confirmDeleteBtn.addEventListener('click', handleConfirmDelete);
+
+            // Admin Button Listeners
+            saveJsonBtn.addEventListener('click', handleSaveJSON);
+            uploadJsonInput.addEventListener('change', handleUploadJSON);
+        });
+
+    </script>
+</body>
+
+</html>
