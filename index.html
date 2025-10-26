@@ -641,7 +641,7 @@
         /**
          * Handles the contact form submission
          */
-        function handleFormSubmit(event) {
+        async function handleFormSubmit(event) {
             event.preventDefault();
             formMessage.classList.add('hidden'); // Hide old messages
 
@@ -665,18 +665,33 @@
             submitButton.disabled = true;
             submitButton.textContent = 'Submitting...';
 
-            // 3. Prepare data for submission (mock)
+            // --- ADDED YOUR GOOGLE SCRIPT URL ---
+            const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw99LVA_rzjwLHFtigVMdC3b0d3u2euuWpVA_xI3AcoDhHGxSehMsYGnauNx70iXCXm/exec";
+
+            // 3. Prepare data for submission
             const formData = new FormData(contactForm);
             const submissionData = {
                 contactInfo: Object.fromEntries(formData.entries()),
                 selectedCompanyIds: Array.from(selectedExhibitors)
             };
 
-            // 4. Simulate API call
+            // 4. --- REPLACED SIMULATION WITH REAL FETCH CALL ---
             console.log("--- SUBMISSION DATA ---");
             console.log(JSON.stringify(submissionData, null, 2));
 
-            setTimeout(() => {
+            try {
+                const response = await fetch(GOOGLE_SCRIPT_URL, {
+                    method: 'POST',
+                    mode: 'no-cors', // Google Scripts often require 'no-cors'
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(submissionData)
+                });
+
+                // NOTE: With 'no-cors', we can't read the response. 
+                // We will assume success if the fetch call itself doesn't throw an error.
+
                 // 5. Populate confirmation screen
                 sessionList.innerHTML = ''; // Clear previous
                 selectedExhibitors.forEach(id => {
@@ -698,11 +713,70 @@
                 selectedExhibitors.clear();
                 renderExhibitors(); // Re-render to remove 'selected' styles
                 updateSelectionSummary(); // Resets counter
+                
+            } catch (error) {
+                console.error("Form submission error:", error);
+                showFormMessage(`An error occurred during submission: ${error.message}. Please try again.`, true);
+            } finally {
+                // 8. Always re-enable the button
                 submitButton.textContent = 'Submit Matchmaking Request';
-                submitButton.disabled = false; // Re-enable in case user navigates back
-
-            }, 1500);
+                submitButton.disabled = false; // Re-enable
+            }
         }
+
+        /**
+         * Handles uploading a JSON file to replace the exhibitor list
+         */
+        function handleUploadJSON(event) {
+            const file = event.target.files[0];
+            if (!file) {
+                return; // No file selected
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if (Array.isArray(data)) {
+                        // Basic validation: check if items look like exhibitors
+                        if (data.length > 0 && typeof data[0] === 'object' && data[0].hasOwnProperty('id') && data[0].hasOwnProperty('name')) {
+                            exhibitorsData = data;
+                            selectedExhibitors.clear();
+                            populateFilters(); // Re-populate filters based on new data
+                            renderExhibitors();
+                            updateSelectionSummary();
+                            // Reset the file input so the same file can be loaded again
+                            event.target.value = null;
+                        } else if (data.length === 0) {
+                            // Handle empty array
+                            exhibitorsData = [];
+                            selectedExhibitors.clear();
+                            populateFilters();
+                            renderExhibitors();
+                            updateSelectionSummary();
+                            event.target.value = null;
+                        } else {
+                            throw new Error("Invalid file format. Expected an array of exhibitor objects.");
+                        }
+                    } else {
+                        throw new Error("Invalid file format. Expected a JSON array.");
+                    }
+                } catch (error) {
+                    console.error("Error uploading JSON:", error);
+                    showFormMessage(`Error: ${error.message}`, true);
+                    event.target.value = null; // Reset input on error
+                }
+            };
+            reader.onerror = () => {
+                console.error("File reading error");
+                showFormMessage("Error: Could not read the selected file.", true);
+                event.target.value = null; // Reset input on error
+            };
+            reader.readAsText(file);
+        }
+
+
+        // --- RE-ADDED MISSING FUNCTIONS ---
 
         /**
          * Handles the "Add Exhibitor" form submission
@@ -813,57 +887,6 @@
                 // In a real app, you'd show this error to the user
                 showFormMessage("Error: Could not save data to JSON.", true);
             }
-        }
-
-        /**
-         * Handles uploading a JSON file to replace the exhibitor list
-         */
-        function handleUploadJSON(event) {
-            const file = event.target.files[0];
-            if (!file) {
-                return; // No file selected
-            }
-
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                try {
-                    const data = JSON.parse(e.target.result);
-                    if (Array.isArray(data)) {
-                        // Basic validation: check if items look like exhibitors
-                        if (data.length > 0 && typeof data[0] === 'object' && data[0].hasOwnProperty('id') && data[0].hasOwnProperty('name')) {
-                            exhibitorsData = data;
-                            selectedExhibitors.clear();
-                            populateFilters(); // Re-populate filters based on new data
-                            renderExhibitors();
-                            updateSelectionSummary();
-                            // Reset the file input so the same file can be loaded again
-                            event.target.value = null;
-                        } else if (data.length === 0) {
-                            // Handle empty array
-                            exhibitorsData = [];
-                            selectedExhibitors.clear();
-                            populateFilters();
-                            renderExhibitors();
-                            updateSelectionSummary();
-                            event.target.value = null;
-                        } else {
-                            throw new Error("Invalid file format. Expected an array of exhibitor objects.");
-                        }
-                    } else {
-                        throw new Error("Invalid file format. Expected a JSON array.");
-                    }
-                } catch (error) {
-                    console.error("Error uploading JSON:", error);
-                    showFormMessage(`Error: ${error.message}`, true);
-                    event.target.value = null; // Reset input on error
-                }
-            };
-            reader.onerror = () => {
-                console.error("File reading error");
-                showFormMessage("Error: Could not read the selected file.", true);
-                event.target.value = null; // Reset input on error
-            };
-            reader.readAsText(file);
         }
 
 
@@ -979,3 +1002,4 @@
 </body>
 
 </html>
+
